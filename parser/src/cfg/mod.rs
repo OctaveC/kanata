@@ -258,16 +258,18 @@ pub fn new_from_file(p: &Path) -> MResult<Cfg> {
 
 pub fn new_from_str(cfg_text: &str) -> MResult<Cfg> {
     let mut s = ParserState::default();
-    let icfg = parse_cfg_raw_string(
-        cfg_text,
-        &mut s,
-        &PathBuf::from("configuration"),
-        &mut FileContentProvider {
-            get_file_content_fn: &mut |_| Err("include is not supported".into()),
-        },
-        DEF_LOCAL_KEYS,
-        Err("environment variables are not supported".into()),
-    )?;
+    let icfg = unsafe {
+        parse_cfg_raw_string(
+            cfg_text,
+            &mut s,
+            &PathBuf::from("configuration"),
+            &mut FileContentProvider {
+                get_file_content_fn: &mut |_| Err("include is not supported".into()),
+            },
+            DEF_LOCAL_KEYS,
+            Err("environment variables are not supported".into()),
+        )?
+    };
     let key_outputs = create_key_outputs(&icfg.klayers, &icfg.overrides, &icfg.chords_v2);
     let switch_max_key_timing = s.switch_max_key_timing.get();
     let mut layout = KanataLayout::new(
@@ -317,7 +319,8 @@ pub struct LayerInfo {
 #[allow(clippy::type_complexity)] // return type is not pub
 fn parse_cfg(p: &Path) -> MResult<Cfg> {
     let mut s = ParserState::default();
-    let icfg = parse_cfg_raw(p, &mut s)?;
+
+    let icfg = unsafe { parse_cfg_raw(p, &mut s)? };
     let key_outputs = create_key_outputs(&icfg.klayers, &icfg.overrides, &icfg.chords_v2);
     let switch_max_key_timing = s.switch_max_key_timing.get();
     let mut layout = KanataLayout::new(
@@ -389,8 +392,11 @@ pub struct IntermediateCfg {
 // why env vars are not not supported.
 pub type EnvVars = std::result::Result<Vec<(String, String)>, String>;
 
+/// # Safety
+///
+/// The allocations within `s` must only be dropped when the returned `klayers` is dropped.
 #[allow(clippy::type_complexity)] // return type is not pub
-fn parse_cfg_raw(p: &Path, s: &mut ParserState) -> MResult<IntermediateCfg> {
+unsafe fn parse_cfg_raw(p: &Path, s: &mut ParserState) -> MResult<IntermediateCfg> {
     const INVALID_PATH_ERROR: &str = "The provided config file path is not valid";
 
     let mut loaded_files: HashSet<PathBuf> = HashSet::default();
@@ -506,8 +512,11 @@ pub struct LspHintInactiveCode {
     pub reason: String,
 }
 
+/// # Safety
+///
+/// The allocations within `s` must only be dropped when the returned `klayers` is dropped.
 #[allow(clippy::type_complexity)] // return type is not pub
-pub fn parse_cfg_raw_string(
+pub unsafe fn parse_cfg_raw_string(
     text: &str,
     s: &mut ParserState,
     cfg_path: &Path,
